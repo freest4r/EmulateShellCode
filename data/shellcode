@@ -1,0 +1,153 @@
+0:000> uf 130e3000
+Flow analysis was incomplete, some code may be missing
+130e3000 60              pushad
+130e3001 64a100000000    mov     eax,dword ptr fs:[00000000h]
+130e3007 8b4004          mov     eax,dword ptr [eax+4]
+130e300a 250000ffff      and     eax,0FFFF0000h
+
+130e300f 6681384d5a      cmp     word ptr [eax],5A4Dh
+130e3014 7517            jne     130e302d  Branch
+
+130e3016 81783c00020000  cmp     dword ptr [eax+3Ch],200h
+130e301d 730e            jae     130e302d  Branch
+
+130e301f 8b503c          mov     edx,dword ptr [eax+3Ch]
+130e3022 03d0            add     edx,eax
+130e3024 66813a5045      cmp     word ptr [edx],4550h
+130e3029 7502            jne     130e302d  Branch
+
+130e302b eb07            jmp     130e3034  Branch
+
+130e302d 2d00000100      sub     eax,10000h
+130e3032 ebdb            jmp     130e300f  Branch
+
+130e3034 8b7a1c          mov     edi,dword ptr [edx+1Ch]
+130e3037 8b722c          mov     esi,dword ptr [edx+2Ch]
+130e303a 03f0            add     esi,eax
+130e303c 03fe            add     edi,esi
+
+130e303e 83ed04          sub     ebp,4
+130e3041 8b4d00          mov     ecx,dword ptr [ebp]
+130e3044 3bce            cmp     ecx,esi
+130e3046 7218            jb      130e3060  Branch
+
+130e3048 3bcf            cmp     ecx,edi
+130e304a 7314            jae     130e3060  Branch
+
+130e304c 8079fdff        cmp     byte ptr [ecx-3],0FFh
+130e3050 750e            jne     130e3060  Branch
+
+130e3052 8079fe50        cmp     byte ptr [ecx-2],50h
+130e3056 7508            jne     130e3060  Branch
+
+130e3058 8079ff10        cmp     byte ptr [ecx-1],10h
+130e305c 7502            jne     130e3060  Branch
+
+130e305e eb02            jmp     130e3062  Branch
+
+130e3060 ebdc            jmp     130e303e  Branch
+
+130e3062 896c2418        mov     dword ptr [esp+18h],ebp
+130e3066 61              popad
+130e3067 87e1            xchg    esp,ecx
+130e3069 60              pushad
+130e306a 8bec            mov     ebp,esp
+130e306c e800000000      call    130e3071
+130e3071 8b3424          mov     esi,dword ptr [esp]
+130e3074 8d642404        lea     esp,[esp+4]
+130e3078 81ee71000000    sub     esi,71h
+130e307e 81c6a0000000    add     esi,0A0h
+130e3084 68dc000000      push    0DCh
+130e3089 59              pop     ecx
+130e308a 8d3c8e          lea     edi,[esi+ecx*4]
+130e308d 6a1f            push    1Fh
+130e308f 58              pop     eax
+130e3090 d12f            shr     dword ptr [edi],1
+130e3092 d116            rcl     dword ptr [esi],1
+130e3094 83c604          add     esi,4
+130e3097 48              dec     eax
+130e3098 7506            jne     130e30a0  Branch
+
+130e309a 6a1f            push    1Fh
+130e309c 58              pop     eax
+130e309d 83c704          add     edi,4
+
+130e30a0 7177            jno     130e3119  Branch
+
+130e30a2 b245            mov     dl,45h
+130e30a4 2c98            sub     al,98h
+130e30a6 c52d86c52d0e    lds     ebp,fword ptr ds:[0E2DC586h]
+130e30ac c529            lds     ebp,fword ptr [ecx]
+130e30ae 844521          test    byte ptr [ebp+21h],al
+130e30b1 90              nop
+130e30b2 c50d409c3600    lds     ecx,fword ptr ds:[369C40h]
+130e30b8 3980ba04403c    cmp     dword ptr [eax+3C4004BAh],eax
+130e30be 023b            add     bh,byte ptr [ebx]
+130e30c0 803100          xor     byte ptr [ecx],0
+130e30c3 3a88409c2680    cmp     cl,byte ptr [eax-7FD963C0h]
+130e30c9 29803aef403c    sub     dword ptr [eax+3C40EF3Ah],eax
+130e30cf 022b            add     ch,byte ptr [ebx]
+130e30d1 802100          and     byte ptr [ecx],0
+130e30d4 3a6b29          cmp     ch,byte ptr [ebx+29h]
+130e30d7 7428            je      130e3101  Branch
+
+130e30d8 2800            sub     byte ptr [eax],al
+
+130e30d9 0000            add     byte ptr [eax],al
+130e30db 00c5            add     ch,al
+
+130e30e6 292b            sub     dword ptr [ebx],ebp
+130e30e8 2b740000        sub     esi,dword ptr [eax+eax]
+130e30ec 0080451e92c1    add     byte ptr [eax-3E6DE1BBh],al
+130e30f2 e301            jecxz   130e30f5  Branch
+
+130e30f4 c1737e5c        sal     dword ptr [ebx+7Eh],5Ch
+
+130e30f5 737e            jae     130e3175  Branch
+
+130e30f7 5c              pop     esp
+
+130e30f8 aa              stos    byte ptr es:[edi]
+130e30f9 aa              stos    byte ptr es:[edi]
+130e30fa aa              stos    byte ptr es:[edi]
+130e30fb 2afe            sub     bh,dh
+130e30fd 99              cdq
+130e30fe e424            in      al,24h
+130e3100 f9              stc
+
+130e3101 d7              xlat    byte ptr [ebx]
+130e3102 c01f33          rcr     byte ptr [edi],33h
+130e3105 3333            xor     esi,dword ptr [ebx]
+130e3107 333a            xor     edi,dword ptr [edx]
+130e3109 fb              sti
+
+130e310a c16382c4        shl     dword ptr [ebx-7Eh],0C4h
+130e310e 3e7ef9          ht jle  130e310a  Branch
+
+130e3111 d7              xlat    byte ptr [ebx]
+130e3112 c01f33          rcr     byte ptr [edi],33h
+130e3115 3333            xor     esi,dword ptr [ebx]
+130e3117 333a            xor     edi,dword ptr [edx]
+
+130e3119 fb              sti
+130e311a c17782c4        sal     dword ptr [edi-7Eh],0C4h
+130e311e 3e7cc5          ht jl   130e30e6  Branch
+
+130e3121 22fe            and     bh,dh
+130e3123 45              inc     ebp
+130e3124 2afc            sub     bh,ah
+130e3126 15682fafad      adc     eax,0ADAF2F68h
+130e312b 64e1aa          loope   130e30d8  Branch
+
+130e312e 45              inc     ebp
+130e312f 7640            jbe     130e3171  Branch
+
+130e3131 62627f          bound   esp,qword ptr [edx+7Fh]
+
+130e3171 008023323a28    add     byte ptr [eax+283A3223h],al
+
+130e3175 3a28            cmp     ch,byte ptr [eax]
+
+130e3177 39b7b1203232    cmp     dword ptr [edi+323220B1h],esi
+130e317d b9b2393980      mov     ecx,803939B2h
+
