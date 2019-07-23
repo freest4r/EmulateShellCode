@@ -1,5 +1,8 @@
-from __future__ import print_function from unicorn import *
+from __future__ import print_function
+#from capstone import *
+from unicorn import *
 from unicorn.x86_const import *
+from struct import pack
 import sys, binascii
 import WinDump
 
@@ -25,6 +28,37 @@ HEAP_SIZE = 0x100000
 
 GDT_ADDR = 0x0
 GDT_SIZE = 0x1000
+
+F_PAGE_GRANULARITY = 0x8
+F_PROT_32 = 0x4
+F_LONG = 0x2
+F_AVAILABLE = 0x1 
+
+A_PRESENT = 0x80
+A_PRIV_3 = 0x60
+A_PRIV_2 = 0x40
+A_PRIV_1 = 0x20
+A_PRIV_0 = 0x0
+A_CODE = 0x18
+A_DATA = 0x10
+A_TSS = 0x0
+A_GATE = 0x0
+
+A_DATA_WRITABLE = 0x2
+A_CODE_READABLE = 0x2
+
+A_DIRECTION_UP = 0x0
+A_DIRECTION_DOWN = 0x4
+A_CONFORMING = 0x0
+
+S_GDT = 0x0
+S_LDT = 0x4
+S_PRIV_3 = 0x3
+S_PRIV_2 = 0x2
+S_PRIV_1 = 0x1
+S_PRIV_0 = 0x0
+
+MAX_GDT = 0x10
 
 
 class IGdt(object):
@@ -91,9 +125,8 @@ class ESC:
         self.em.mem_write(addr, self.shellcode)
 
     def initGDT(self):
-        self.igdt = Igdt(self.em, 0x0, 0x1000)
+        self.igdt = IGdt(self.em, 0x0, 0x1000)
         self.igdt.Setup(TEB_BASE)
-
 
     def initRegs(self):
         self.em.reg_write(UC_X86_REG_EAX, 0xd7)
