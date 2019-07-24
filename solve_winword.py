@@ -5,6 +5,10 @@ from unicorn.x86_const import *
 from struct import pack
 import sys, binascii
 import WinDump
+def hook_mem_read(uc, type, addr,*args):
+    print("hook_mem_read!")
+    print(hex(addr))
+    return False
 
 '''
 eax=130e1032 ebx=032616e8 ecx=130e1000 edx=0052efa8 esi=0052e418 edi=00000000
@@ -13,8 +17,46 @@ cs=001b  ss=0023  ds=0023  es=0023  fs=003b  gs=0000             efl=00000202
 https://gist.github.com/sparktrend/256e3af76a2b542bff8c0bd647e3feca
 '''
 
+GDT_ADDR = 0x3000
+GDT_LIMIT = 0x1000
+GDT_ENTRY_SIZE = 0x8
+
+GS_SEGMENT_ADDR = 0x5000
+GS_SEGMENT_SIZE = 0x1000
+
+F_GRANULARITY = 0x8
+F_PROT_32 = 0x4
+F_LONG = 0x2
+F_AVAILABLE = 0x1 
+
+A_PRESENT = 0x80
+
+A_PRIV_3 = 0x60
+A_PRIV_2 = 0x40
+A_PRIV_1 = 0x20
+A_PRIV_0 = 0x0
+
+A_CODE = 0x10
+A_DATA = 0x10
+A_TSS = 0x0
+A_GATE = 0x0
+
+A_EXEC = 0x8
+A_DATA_WRITABLE = 0x2
+A_CODE_READABLE = 0x2
+
+A_DIR_CON_BIT = 0x4
+
+S_GDT = 0x0
+S_LDT = 0x4
+S_PRIV_3 = 0x3
+S_PRIV_2 = 0x2
+S_PRIV_1 = 0x1
+S_PRIV_0 = 0x0
+
+#########
 STACK_BASE = 0x1b0000
-STACK_TOP = 0x1a000
+STACK_TOP = 0xb0000
 STACK_SIZE = STACK_BASE - STACK_TOP
 
 CODE_BASE = 0x69291000
@@ -25,89 +67,6 @@ TEB_SIZE = 0x1000
 
 HEAP_BASE = 0x130e0000
 HEAP_SIZE = 0x100000
-
-GDT_ADDR = 0x0
-GDT_SIZE = 0x1000
-
-F_PAGE_GRANULARITY = 0x8
-F_PROT_32 = 0x4
-F_LONG = 0x2
-F_AVAILABLE = 0x1 
-
-A_PRESENT = 0x80
-A_PRIV_3 = 0x60
-A_PRIV_2 = 0x40
-A_PRIV_1 = 0x20
-A_PRIV_0 = 0x0
-A_CODE = 0x18
-A_DATA = 0x10
-A_TSS = 0x0
-A_GATE = 0x0
-
-A_DATA_WRITABLE = 0x2
-A_CODE_READABLE = 0x2
-
-A_DIRECTION_UP = 0x0
-A_DIRECTION_DOWN = 0x4
-A_CONFORMING = 0x0
-
-S_GDT = 0x0
-S_LDT = 0x4
-S_PRIV_3 = 0x3
-S_PRIV_2 = 0x2
-S_PRIV_1 = 0x1
-S_PRIV_0 = 0x0
-
-MAX_GDT = 0x10
-
-
-class IGdt(object):
-    def __init__(self, emu, gdt_address, gdt_size):
-        self.emu = emu
-        self.emu.mem_map(gdt_address, gdt_size)
-        self.emu.reg_write(UC_X86_REG_GDTR, (0, gdt_address, gdt_size, 0x0))
-        
-        self.gdt_address = gdt_address
-        self.gdt_entry_count = 0
-        
-    def create_selector(self, idx, flags):
-        to_ret = flags
-        to_ret |= idx << 3
-        return to_ret
-    
-    def create_gdt_entry(self, base, limit, access, flags):
-        to_ret = limit & 0xffff;
-        to_ret |= (base & 0xffffff) << 16;
-        to_ret |= (access & 0xff) << 40;
-        to_ret |= ((limit >> 16) & 0xf) << 48;
-        to_ret |= (flags & 0x0f) << 52;
-        to_ret |= ((base >> 24) & 0xff) << 56;
-        return pack('<Q',to_ret)
-    
-    def CreateSegmentSelector(self, seg_reg, seg_addr, seg_size, access):
-        if self.gdt_entry_count < MAX_GDT:
-            gdtidx = self.gdt_entry_count+1 # Add a gdt entry from index 1 (because the first entry is reserved?)
-            
-            gdt_entry = self.create_gdt_entry(seg_addr, seg_size, access, F_PROT_32 | F_PAGE_GRANULARITY)
-            self.emu.mem_write(self.gdt_address + 8*gdtidx, gdt_entry)
-    
-            selector = self.create_selector(gdtidx, S_GDT | S_PRIV_3)
-            self.emu.reg_write(seg_reg, selector)
-            
-            self.gdt_entry_count += 1
-            
-            return selector
-        
-    def Setup(self, teb):
-        ds = self.CreateSegmentSelector(UC_X86_REG_DS, 0x0, 0xfffff, A_PRESENT | A_PRIV_3 | A_DATA | A_DATA_WRITABLE | A_DIRECTION_UP)
-        es = self.CreateSegmentSelector(UC_X86_REG_ES, 0x0, 0xfffff, A_PRESENT | A_PRIV_3 | A_DATA | A_DATA_WRITABLE | A_DIRECTION_UP)
-        fs = self.CreateSegmentSelector(UC_X86_REG_FS, teb, 1,      A_PRESENT | A_PRIV_3 | A_DATA | A_DATA_WRITABLE | A_DIRECTION_UP)   # FIXME: Correct the limit
-        gs = self.CreateSegmentSelector(UC_X86_REG_GS, 0x0, 0xfffff, A_PRESENT | A_PRIV_3 | A_DATA | A_DATA_WRITABLE | A_DIRECTION_UP)            
-        cs = self.CreateSegmentSelector(UC_X86_REG_CS, 0x0, 0xfffff, A_PRESENT | A_PRIV_3 | A_CODE | A_CODE_READABLE | A_CONFORMING)
-        #ss = self.CreateSegmentSelector(UC_X86_REG_SS, 0x0, 0xfffff, A_PRESENT | A_PRIV_3 | A_DATA | A_DATA_WRITABLE | A_DIRECTION_DOWN) 
-        
-        #print ds, es, fs, gs, cs, ss
-    
 
 class ESC:
     def __init__(self, dumpPath):
@@ -124,9 +83,57 @@ class ESC:
         self.shellcode_addr = addr
         self.em.mem_write(addr, self.shellcode)
 
+    def create_selector(idx, flags):
+	to_ret = flags
+	to_ret |= idx << 3
+	return to_ret
+
+    def create_gdt_entry(base, limit, access, flags):
+	to_ret = limit & 0xffff;
+	to_ret |= (base & 0xffffff) << 16;
+	to_ret |= (access & 0xff) << 40;
+	to_ret |= ((limit >> 16) & 0xf) << 48;
+	to_ret |= (flags & 0xff) << 52;
+	to_ret |= ((base >> 24) & 0xff) << 56;
+	return pack('<Q',to_ret)
+
+    def write_gdt(uc, gdt, mem):
+	for idx, value in enumerate(gdt):
+	    offset = idx * GDT_ENTRY_SIZE
+	    uc.mem_write(mem + offset, value)
+
     def initGDT(self):
-        self.igdt = IGdt(self.em, 0x0, 0x1000)
-        self.igdt.Setup(TEB_BASE)
+        self.em.mem_map(GDT_ADDR, GDT_LIMIT)
+        self.em.mem_map(GST_SEGMENT_ADDR, GS_SEGMENT_SIZE)
+        gdt = [create_gdt_entry(0,0,0,0) for i in range(31)]
+        gdt[15] = create_gdt_entry(GS_SEGMENT_ADDR, GS_SEGMENT_SIZE, A_PRESENT | A_DATA |
+                A_DATA_WRITABLE | A_PRIV_3 | A_DIR_CON_BIT, F_PROT_32)
+        gdt[16] = create_gdt_entry(0, 0xfffff000 , A_PRESENT | A_DATA | A_DATA_WRITABLE | A_PRIV_3 |
+                A_DIR_CON_BIT, F_PROT_32)  # Data Segment
+        gdt[17] = create_gdt_entry(0, 0xfffff000 , A_PRESENT | A_CODE | A_CODE_READABLE | A_PRIV_3 |
+                A_EXEC | A_DIR_CON_BIT, F_PROT_32)  # Code Segment
+        gdt[18] = create_gdt_entry(0, 0xfffff000 , A_PRESENT | A_DATA | A_DATA_WRITABLE | A_PRIV_0 |
+                A_DIR_CON_BIT, F_PROT_32)  # Stack Segment
+        gdt[19] = create_gdt_entry(0x7ffde000, 0x00000fff , A_PRESENT | A_DATA | A_DATA_WRITABLE |
+                A_PRIV_0 | A_DIR_CON_BIT, F_PROT_32)  # FS 
+
+        write_gdt(uc, gdt, GDT_ADDR)
+        uc.reg_write(UC_X86_REG_GDTR, (0, GDT_ADDR, len(gdt) * GDT_ENTRY_SIZE-1, 0x0))
+
+        selector = create_selector(15, S_GDT | S_PRIV_3)
+        uc.reg_write(UC_X86_REG_GS, selector)
+
+        selector = create_selector(16, S_GDT | S_PRIV_3)
+        uc.reg_write(UC_X86_REG_DS, selector)
+
+        selector = create_selector(17, S_GDT | S_PRIV_3)
+        uc.reg_write(UC_X86_REG_CS, selector)
+
+        selector = create_selector(18, S_GDT | S_PRIV_0)
+        uc.reg_write(UC_X86_REG_SS, selector)
+
+        selector = create_selector(19, S_GDT | S_PRIV_0)
+        uc.reg_write(UC_X86_REG_FS, selector)
 
     def initRegs(self):
         self.em.reg_write(UC_X86_REG_EAX, 0xd7)
@@ -135,16 +142,19 @@ class ESC:
         self.em.reg_write(UC_X86_REG_EDX, 0x130e105a)
         self.em.reg_write(UC_X86_REG_EIP, 0x130e3000)
         self.em.reg_write(UC_X86_REG_ESP, 0x130e105e)
-        self.em.reg_write(UC_X86_REG_ESI, 0x0)
-        self.em.reg_write(UC_X86_REG_EDI, 0x0052e418)
+        self.em.reg_write(UC_X86_REG_ESI, 0x0052e418)
+        self.em.reg_write(UC_X86_REG_EDI, 0x0)
 
     def initMem(self, addr, size):
         data = self.dmp.readMem(addr, size)
+        data = binascii.unhexlify(data)
         self.em.mem_write(addr, data)
+        m = self.em.mem_read(addr, size)
 
     def printStack(self, size=0x40):
         esp = self.em.reg_read(UC_X86_REG_ESP)
-        stack = self.em.mem_read(esp, 0x40)
+        print('esp', hex(esp))
+        stack = self.em.mem_read(esp, size)
         stack = binascii.hexlify(stack)
         print(stack)
 
@@ -152,23 +162,27 @@ class ESC:
 def main():
     esc = ESC("~/study/WINWORD3.DMP")
     print("load DMP done")
+    esc.em.hook_add(UC_HOOK_MEM_READ_UNMAPPED, hook_mem_read)
 
     #init GDT
-    esc.initGDT()
+    #esc.initGDT()
+    print("init GDT done")
 
     #init registers
     esc.initRegs()
     print("init regs done")
     
     #init mem
-    esc.initMem(0x130e0000, 0x1000)
-    #esc.initMem(0x7ffde000, 0x1000)
+    esc.initMem(HEAP_BASE, 0x1000)
+    esc.initMem(HEAP_BASE+0x1000, 0x1000)
+    esc.initMem(0x7ffde000, 0x100)
     print("init mem done")
 
     #setShellCode
-    esc.setShellCode(0x130e3000, b"\x60")
+    #esc.setShellCode(0x130e3000, b"\x60")
     esc.setShellCode(0x130e3000, b"\x60\x64\xa1\x00\x00\x00\x00")
     print("set shellcode done")
+
 
     esc.printStack()
     print("GO")
