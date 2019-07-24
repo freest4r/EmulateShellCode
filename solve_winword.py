@@ -1,5 +1,5 @@
 from __future__ import print_function
-#from capstone import *
+from capstone import *
 from unicorn import *
 from unicorn.x86_const import *
 from struct import pack
@@ -17,6 +17,74 @@ https://gist.github.com/sparktrend/256e3af76a2b542bff8c0bd647e3feca
 https://scoding.de/setting-global-descriptor-table-unicorn
 https://rev.ng/gitlab/angr/simuvex/blob/d8c932fe7eda9e17e7d555da8d7830b5b293cc6d/simuvex/plugins/unicorn_engine.py
 '''
+scode ="\x60"
+scode+="\x64\xa1\x00\x00\x00\x00"
+scode+="\x8b\x40\x04"
+scode+="\x25\x00\x00\xff\xff"
+scode+="\x66\x81\x38\x4d\x5a"
+scode+="\x75\x17"
+scode+="\x81\x78\x3c\x00\x02\x00\x00"
+scode+="\x73\x0e"
+scode+="\x8b\x50\x3c"
+scode+="\x03\xd0"
+scode+="\x66\x81\x3a\x50\x45"
+scode+="\x75\x02"
+scode+="\xeb\x07"
+scode+="\x2d\x00\x00\x01\x00"
+scode+="\xeb\xdb"
+scode+="\x8b\x7a\x1c"
+scode+="\x8b\x72\x2c"
+scode+="\x03\xf0"
+scode+="\x03\xfe"
+scode+="\x83\xed\x04"
+scode+="\x8b\x4d\x00"
+scode+="\x3b\xce"
+scode+="\x72\x18"
+scode+="\x3b\xcf"
+scode+="\x73\x14"
+scode+="\x80\x79\xfd\xff"
+scode+="\x75\x0e"
+scode+="\x80\x79\xfe\x50"
+scode+="\x75\x08"
+scode+="\x80\x79\xff\x10"
+scode+="\x75\x02"
+scode+="\xeb\x02"
+scode+="\xeb\xdc"
+scode+="\x89\x6c\x24\x18"
+scode+="\x61"
+scode+="\x87\xe1"
+scode+="\x60"
+scode+="\x8b\xec"
+scode+="\xe8\x00\x00\x00\x00"
+scode+="\x8b\x34\x24"
+scode+="\x8d\x64\x24\x04"
+scode+="\x81\xee\x71\x00\x00\x00"
+scode+="\x81\xc6\xa0\x00\x00\x00"
+scode+="\x68\xdc\x00\x00\x00"
+scode+="\x59"
+scode+="\x8d\x3c\x8e"
+scode+="\x6a\x1f"
+scode+="\x58"
+scode+="\xd1\x2f"
+scode+="\xd1\x16"
+scode+="\x83\xc6\x04"
+scode+="\x48"
+scode+="\x75\x06"#130e3098
+scode+="\x6a\x1f"
+scode+="\x58"
+scode+="\x83\xc7\x04"
+scode+="\x71\x77"
+scode+="\xb2\x45"
+scode+="\x2c\x98"
+scode+="\xc5\x2d\x86\xc5\x2d\x0e"
+scode+="\xc5\x29"
+scode+="\x84\x45\x21"
+scode+="\x90"#130e30b1 nop
+scode+="\xc5\x0d\x40\x9c\x36\x00"
+scode+="\x39\x80\xba\x04\x40\x3c"
+scode+="\x02\x3b"
+scode+="\x80\x31\x00"
+#scode+="\x3a\x88\x40\x9c\x26\x80\x29\x80\x3a\xef\x40\x3c\x02\x2b\x80\x21\x00\x3a\x6b\x29\x74\x28\x00\x00\x00\xc5\xf2\xb0\x61\xaa\x45\xf6\x41\x62\xfc\x29\x2b\x2b\x74\x00\x00\x00\x80\x45\x1e\x92\xc1\xe3\x01\xc1\x73\x7e\x5c\xaa\xaa\xaa\x2a\xfe\x99\xe4\x24"
 
 GDT_ADDR = 0x3000
 GDT_LIMIT = 0x1000
@@ -69,21 +137,58 @@ TEB_SIZE = 0x1000
 HEAP_BASE = 0x130e0000
 HEAP_SIZE = 0x100000
 
+def printStack(em, size=0x40):
+    esp = em.reg_read(UC_X86_REG_ESP)
+    stack = binascii.hexlify(em.mem_read(esp, size))
+    data = ''
+    for i in range(0,len(stack),8):
+        if i%32 == 0:
+            data = str(hex(esp))+"  "
+            esp+=0x10
+        data += stack[i:i+8]+" "
+        if i%32 == 24:
+            print(data)
+            data = ''
+
+def printRegs(em):
+    eax = em.reg_read(UC_X86_REG_EAX)
+    ebx = em.reg_read(UC_X86_REG_EBX)
+    ecx = em.reg_read(UC_X86_REG_ECX)
+    edx = em.reg_read(UC_X86_REG_EDX)
+    esi = em.reg_read(UC_X86_REG_ESI)
+    edi = em.reg_read(UC_X86_REG_EDI)
+    eip = em.reg_read(UC_X86_REG_EIP)
+    esp = em.reg_read(UC_X86_REG_ESP)
+    ebp = em.reg_read(UC_X86_REG_EBP)
+    print("eax=%x ebx=%x ecx=%x edx=%x esi=%x edi=%x"%(eax,ebx,ecx,edx,esi,edi))
+    print("eip=%x esp=%x ebp=%x"%(eip,esp,ebp))
+
 def hook_code(em, addr, size, data):
+    md = Cs(CS_ARCH_X86, CS_MODE_32)
     ins = em.mem_read(addr, size)
-    print(hex(addr)+":", binascii.hexlify(ins))
+    print("--------------------------------------")
+    asm = md.disasm(str(ins),addr)
+    for a in asm:
+        print("%x: %-8s\t%s\t%s" % (a.address, binascii.hexlify(ins), a.mnemonic, a.op_str) )
+        if size == None:
+            break
+    printRegs(em)
+    printStack(em) 
 
 def hook_mem_invalid(em, access, addr, size, value, data):
     if access == UC_MEM_WRITE_UNMAPPED:
         print("UNMAPPED MEMORY WRITE at 0x%x, size: %u, value: 0x%x"%(addr, size, value))
-        return False
-    print("UNMAPPED MEMORY READ at 0x%x, size: %u, value: 0x%x"%(addr, size, value))
+    else:
+        print("UNMAPPED MEMORY READ at 0x%x, size: %u, value: 0x%x"%(addr, size, value))
     return False
 
-def hook_mem_read(em, type, addr,*args):
-    print("hook_mem_read!")
-    print(hex(addr))
+def hook_mem_access(em, access, addr, size, value, data):
+    if access == UC_MEM_WRITE:
+        print("Memory write at 0x%x, size: %u, value: 0x%x"%(addr, size, value)) 
+    else:
+        print("Memory read at 0x%x, size: %u, value: 0x%x"%(addr, size, value)) 
     return False
+
 
 class ESC:
     def __init__(self, dumpPath):
@@ -92,12 +197,15 @@ class ESC:
         #
         self.em.mem_map(STACK_TOP, STACK_SIZE)
         self.em.mem_map(CODE_BASE, CODE_SIZE)
+        self.em.mem_map(0x69290000, 0x1000)
         self.em.mem_map(TEB_BASE, TEB_SIZE)
         self.em.mem_map(HEAP_BASE, HEAP_SIZE)
         #
+        self.em.hook_add(UC_HOOK_CODE, hook_code)
+        #self.em.hook_add(UC_HOOK_MEM_READ, hook_mem_access)
+        #self.em.hook_add(UC_HOOK_MEM_WRITE, hook_mem_access)
         self.em.hook_add(UC_HOOK_MEM_READ_UNMAPPED, hook_mem_invalid)
         self.em.hook_add(UC_HOOK_MEM_WRITE_UNMAPPED, hook_mem_invalid)
-        self.em.hook_add(UC_HOOK_CODE, hook_code)
 
 
     def setShellCode(self, addr, shellcode):
@@ -159,10 +267,11 @@ class ESC:
         self.em.reg_write(UC_X86_REG_EBX, 0x032616e8 )
         self.em.reg_write(UC_X86_REG_ECX, 0x130e1000)
         self.em.reg_write(UC_X86_REG_EDX, 0x130e105a)
-        self.em.reg_write(UC_X86_REG_EIP, 0x130e3000)
-        self.em.reg_write(UC_X86_REG_ESP, 0x130e105e)
         self.em.reg_write(UC_X86_REG_ESI, 0x0052e418)
         self.em.reg_write(UC_X86_REG_EDI, 0x0)
+        self.em.reg_write(UC_X86_REG_EIP, 0x130e3000)
+        self.em.reg_write(UC_X86_REG_ESP, 0x130e105e)
+        self.em.reg_write(UC_X86_REG_EBP, 0x001ac4c8)
 
     def initMem(self, addr, size):
         data = self.dmp.readMem(addr, size)
@@ -191,26 +300,26 @@ def main():
     print("init regs done")
     
     #init mem
-    esc.initMem(HEAP_BASE, 0x1000)
-    esc.initMem(HEAP_BASE+0x1000, 0x1000)
-    #esc.initMem(HEAP_BASE+0x3000, 0x1000)
-    esc.initMem(0x7ffde000, 0x100)
-    print("init mem done")
+    esc.initMem(0x69290000, 0xfff)
+    for i in range(1,6):
+        esc.initMem(CODE_BASE+0x10000*i, 0x10000)
+    for i in range(10):
+        esc.initMem(HEAP_BASE+0x10000*i, 0x10000)
+    esc.initMem(TEB_BASE, 0x100)
+    esc.initMem(0x1ac000, 0x1000)
+    #print(binascii.hexlify(esc.em.mem_read(0x130e30a0, 0x40)))
 
     #setShellCode
-    code = "\x60"
-    code+= "\x64\xa1\x00\x00\x00\x00"
-    #code+= "\x8b\x40\x04"
-    esc.setShellCode(0x130e3000, code)
-    #esc.setShellCode(0x130e3000, b"\x60\x64\xa1\x00\x00\x00\x00")
+    esc.setShellCode(0x130e3000, scode)
     print("set shellcode done")
+    print(binascii.hexlify(esc.em.mem_read(0x130e30a0, 0x40)))
 
-    print("GO")
+    '''
     #start
+    print("GO\n\n")
     esc.em.emu_start(esc.shellcode_addr, esc.shellcode_addr+len(esc.shellcode))
-    print("DONE")
-
-
+    print("\n\nDONE")
+    '''
 
 
 if __name__ == "__main__":
