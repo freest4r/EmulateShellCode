@@ -131,11 +131,24 @@ STACK_SIZE = STACK_BASE - STACK_TOP
 CODE_BASE = 0x69291000
 CODE_SIZE = 0x64000
 
+HEAP_BASE = 0x130e0000
+HEAP_SIZE = 0x100000
+HEAP_BASE2 = 0x251000
+HEAP_SIZE2 = 0xd2000
+
 TEB_BASE = 0x7ffde000
 TEB_SIZE = 0x1000
 
-HEAP_BASE = 0x130e0000
-HEAP_SIZE = 0x100000
+PEB_BASE = 0x7ffdf000
+PEB_SIZE = 0x1000
+
+NTDLL_BASE = 0x77687000
+NTDLL_SIZE = 0x1000
+NTDLL_BASE2 = 0x77610000
+NTDLL_SIZE2 = 0x10000
+
+SC_ADDR = 0x130e3000
+SC_SIZE = 0x1000
 
 def printStack(em, size=0x40):
     esp = em.reg_read(UC_X86_REG_ESP)
@@ -195,11 +208,32 @@ class ESC:
         self.dmp = WinDump.WinDump(dumpPath)
         self.em = Uc(UC_ARCH_X86, UC_MODE_32)
         #
+        self.em.mem_map(NTDLL_BASE, NTDLL_SIZE)
+        self.em.mem_map(NTDLL_BASE2, NTDLL_SIZE2)
         self.em.mem_map(STACK_TOP, STACK_SIZE)
         self.em.mem_map(CODE_BASE, CODE_SIZE)
         self.em.mem_map(0x69290000, 0x1000)
-        self.em.mem_map(TEB_BASE, TEB_SIZE)
         self.em.mem_map(HEAP_BASE, HEAP_SIZE)
+        self.em.mem_map(HEAP_BASE2, HEAP_SIZE2)
+        self.em.mem_map(TEB_BASE, TEB_SIZE)
+        self.em.mem_map(PEB_BASE, PEB_SIZE)
+        #self.em.mem_map(SC_ADDR, SC_SIZE)
+        #
+        #init mem
+        self.initMem(SC_ADDR, SC_SIZE)
+        self.initMem(0x69290000, 0xfff)
+        for i in range(1,6):
+            self.initMem(CODE_BASE+0x10000*i, 0x10000)
+        for i in range(10):
+            self.initMem(HEAP_BASE+0x10000*i, 0x10000)
+        #self.initMem(HEAP_BASE, HEAP_SIZE)
+        self.initMem(HEAP_BASE2, 0x2000)
+        self.initMem(TEB_BASE, TEB_SIZE-1)
+        self.initMem(PEB_BASE, PEB_SIZE-1)
+        self.initMem(NTDLL_BASE, NTDLL_SIZE-1)
+        self.initMem(NTDLL_BASE2, NTDLL_SIZE2-1)
+        self.initMem(0x1ac000, 0x1000)
+        #print(binascii.hexlify(esc.em.mem_read(0x130e30a0, 0x40)))
         #
         self.em.hook_add(UC_HOOK_CODE, hook_code)
         #self.em.hook_add(UC_HOOK_MEM_READ, hook_mem_access)
@@ -207,30 +241,29 @@ class ESC:
         self.em.hook_add(UC_HOOK_MEM_READ_UNMAPPED, hook_mem_invalid)
         self.em.hook_add(UC_HOOK_MEM_WRITE_UNMAPPED, hook_mem_invalid)
 
-
     def setShellCode(self, addr, shellcode):
         self.shellcode = shellcode
         self.shellcode_addr = addr
         self.em.mem_write(addr, self.shellcode)
 
     def create_selector(self, idx, flags):
-	to_ret = flags
-	to_ret |= idx << 3
-	return to_ret
+        to_ret = flags
+        to_ret |= idx << 3
+        return to_ret
 
     def create_gdt_entry(self, base, limit, access, flags):
-	to_ret = limit & 0xffff;
-	to_ret |= (base & 0xffffff) << 16;
-	to_ret |= (access & 0xff) << 40;
-	to_ret |= ((limit >> 16) & 0xf) << 48;
-	to_ret |= (flags & 0xff) << 52;
-	to_ret |= ((base >> 24) & 0xff) << 56;
-	return pack('<Q',to_ret)
+        to_ret = limit & 0xffff;
+        to_ret |= (base & 0xffffff) << 16;
+        to_ret |= (access & 0xff) << 40;
+        to_ret |= ((limit >> 16) & 0xf) << 48;
+        to_ret |= (flags & 0xff) << 52;
+        to_ret |= ((base >> 24) & 0xff) << 56;
+        return pack('<Q',to_ret)
 
     def write_gdt(self, gdt, mem):
-	for idx, value in enumerate(gdt):
-	    offset = idx * GDT_ENTRY_SIZE
-	    self.em.mem_write(mem + offset, value)
+        for idx, value in enumerate(gdt):
+            offset = idx * GDT_ENTRY_SIZE
+            self.em.mem_write(mem + offset, value)
 
     def initGDT(self):
         self.em.mem_map(GDT_ADDR, GDT_LIMIT)
@@ -299,27 +332,17 @@ def main():
     esc.initRegs()
     print("init regs done")
     
-    #init mem
-    esc.initMem(0x69290000, 0xfff)
-    for i in range(1,6):
-        esc.initMem(CODE_BASE+0x10000*i, 0x10000)
-    for i in range(10):
-        esc.initMem(HEAP_BASE+0x10000*i, 0x10000)
-    esc.initMem(TEB_BASE, 0x100)
-    esc.initMem(0x1ac000, 0x1000)
-    #print(binascii.hexlify(esc.em.mem_read(0x130e30a0, 0x40)))
 
     #setShellCode
-    esc.setShellCode(0x130e3000, scode)
+    #esc.setShellCode(0x130e3000, scode)
     print("set shellcode done")
     print(binascii.hexlify(esc.em.mem_read(0x130e30a0, 0x40)))
 
-    '''
     #start
     print("GO\n\n")
-    esc.em.emu_start(esc.shellcode_addr, esc.shellcode_addr+len(esc.shellcode))
+    esc.em.emu_start(SC_ADDR,  SC_ADDR+0x150)
+    #esc.em.emu_start(esc.shellcode_addr, esc.shellcode_addr+len(esc.shellcode))
     print("\n\nDONE")
-    '''
 
 
 if __name__ == "__main__":
