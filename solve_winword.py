@@ -136,6 +136,9 @@ HEAP_SIZE = 0x100000
 HEAP_BASE2 = 0x250000
 HEAP_SIZE2 = 0xd2000
 
+SYSTEMDEF_BASE = 0x30000
+SYSTEMDEF_SIZE = 0x4000
+
 ACTIVATION_BASE = 0x40000
 ACTIVATION_SIZE  = 0x1000
 
@@ -163,19 +166,31 @@ MSVCRT_SIZE = 0x1000
 MSVCRT_BASE2 = 0x75ae1000
 MSVCRT_SIZE2 = 0x9f000
 
-KERNEL32_BASE = 0x758f1000
-KERNEL32_SIZE = 0x43000
-KERNEL32_BASE2 = 0x75934000
-KERNEL32_SIZE2 = 0x2000
+KERNELBASE_BASE = 0x758f1000
+KERNELBASE_SIZE = 0x43000
+KERNELBASE_BASE2 = 0x75934000
+KERNELBASE_SIZE2 = 0x2000
+
+KERNEL32_BASE = 0x76580000
+KERNEL32_SIZE = 0x1000
+KERNEL32_BASE2 = 0x76581000
+KERNEL32_SIZE2 = 0xc5000
 
 #SXS_BASE = 0x75660000
 #SXS_SIZE = 0x58000
-APPHELP_BASE = 0x75620000#0x75600000 ~ 0x7563c000 (3c000)
+APPHELP_BASE = 0x75600000#0x75600000 ~ 0x7563c000 (3c000)
 APPHELP_SIZE = 0x1000
+APPHELP_BASE2 = 0x75601000#0x75600000 ~ 0x7563c000 (3c000)
+APPHELP_SIZE2 = 0x3b000
+APPHELP_BASE3 = 0x7563c000#0x75600000 ~ 0x7563c000 (3c000)
+APPHELP_SIZE3 = 0x3000
 
 
 SC_ADDR = 0x130e3000
 SC_SIZE = 0x1000
+
+
+end = 0
 
 def printStack(em, size=0x40):
     esp = em.reg_read(UC_X86_REG_ESP)
@@ -203,6 +218,15 @@ def printRegs(em):
     print("eax=%x ebx=%x ecx=%x edx=%x esi=%x edi=%x"%(eax,ebx,ecx,edx,esi,edi))
     print("eip=%x esp=%x ebp=%x"%(eip,esp,ebp))
 
+def checkend(em):
+    print("check end")
+    eip = em.reg_read(UC_X86_REG_EIP)
+    data = binascii.hexlify(em.mem_read(eip, 0x10))
+    print(data)
+    print(type(data))
+    if data=="00000000000000000000000000000000":
+        sys.exit(1)
+
 def hook_code(em, addr, size, data):
     md = Cs(CS_ARCH_X86, CS_MODE_32)
     ins = em.mem_read(addr, size)
@@ -214,6 +238,8 @@ def hook_code(em, addr, size, data):
             break
     printRegs(em)
     printStack(em) 
+    if binascii.hexlify(ins) == '0000':
+        checkend(em)
 
 def hook_mem_invalid(em, access, addr, size, value, data):
     if access == UC_MEM_WRITE_UNMAPPED:
@@ -242,9 +268,13 @@ class ESC:
         self.em.mem_map(NTDLL_BASE3, NTDLL_SIZE3)
         self.em.mem_map(MSVCRT_BASE, MSVCRT_SIZE)
         self.em.mem_map(MSVCRT_BASE2, MSVCRT_SIZE2)
+        self.em.mem_map(KERNELBASE_BASE, KERNELBASE_SIZE)
+        self.em.mem_map(KERNELBASE_BASE2, KERNELBASE_SIZE2)
         self.em.mem_map(KERNEL32_BASE, KERNEL32_SIZE)
         self.em.mem_map(KERNEL32_BASE2, KERNEL32_SIZE2)
         self.em.mem_map(APPHELP_BASE, APPHELP_SIZE)
+        self.em.mem_map(APPHELP_BASE2, APPHELP_SIZE2)
+        self.em.mem_map(APPHELP_BASE3, APPHELP_SIZE3)
         self.em.mem_map(STACK_TOP, STACK_SIZE)
         self.em.mem_map(CODE_BASE, CODE_SIZE)
         self.em.mem_map(0x69290000, 0x1000)
@@ -255,6 +285,7 @@ class ESC:
         self.em.mem_map(SHARED_BASE, SHARED_SIZE)
         self.em.mem_map(NLS_BASE, NLS_SIZE)
         self.em.mem_map(ACTIVATION_BASE, ACTIVATION_SIZE)
+        self.em.mem_map(SYSTEMDEF_BASE, SYSTEMDEF_SIZE)
         #self.em.mem_map(SC_ADDR, SC_SIZE)
         #
         #init mem
@@ -273,12 +304,15 @@ class ESC:
         self.initMem(NTDLL_BASE3, NTDLL_SIZE3-1)
         self.initMem(MSVCRT_BASE, MSVCRT_SIZE-1)
         self.initMem(MSVCRT_BASE2, MSVCRT_SIZE2-1)
-        self.initMem(KERNEL32_BASE, KERNEL32_SIZE-1)
-        self.initMem(KERNEL32_BASE2, KERNEL32_SIZE2-1)
+        self.initMem(KERNELBASE_BASE, KERNELBASE_SIZE-1)
+        self.initMem(KERNELBASE_BASE2, KERNELBASE_SIZE2-1)
         self.initMem(APPHELP_BASE, APPHELP_SIZE-1)
+        self.initMem(APPHELP_BASE2, APPHELP_SIZE2-1)
+        self.initMem(APPHELP_BASE3, APPHELP_SIZE3-1)
         self.initMem(SHARED_BASE, SHARED_SIZE-1)
         self.initMem(NLS_BASE, NLS_SIZE-1)
         self.initMem(ACTIVATION_BASE, ACTIVATION_SIZE-1)
+        self.initMem(SYSTEMDEF_BASE, SYSTEMDEF_SIZE-1)
         self.initMem(0x1ac000, 0x1000)
         #print(binascii.hexlify(esc.em.mem_read(0x130e30a0, 0x40)))
         #
