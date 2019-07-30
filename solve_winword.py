@@ -133,8 +133,11 @@ CODE_SIZE = 0x64000
 
 HEAP_BASE = 0x130e0000
 HEAP_SIZE = 0x100000
-HEAP_BASE2 = 0x251000
+HEAP_BASE2 = 0x250000
 HEAP_SIZE2 = 0xd2000
+
+ACTIVATION_BASE = 0x40000
+ACTIVATION_SIZE  = 0x1000
 
 TEB_BASE = 0x7ffde000
 TEB_SIZE = 0x1000
@@ -142,10 +145,34 @@ TEB_SIZE = 0x1000
 PEB_BASE = 0x7ffdf000
 PEB_SIZE = 0x1000
 
+SHARED_BASE = 0x7ffe0000
+SHARED_SIZE = 0x1000
+
+NLS_BASE = 0x7ffb0000
+NLS_SIZE = 0x23000
+
 NTDLL_BASE = 0x77687000
 NTDLL_SIZE = 0x1000
-NTDLL_BASE2 = 0x77610000
-NTDLL_SIZE2 = 0x10000
+NTDLL_BASE2 = 0x775b1000
+NTDLL_SIZE2 = 0xd6000
+NTDLL_BASE3 = 0x77689000
+NTDLL_SIZE3 = 0x5000
+
+MSVCRT_BASE = 0x75ae0000
+MSVCRT_SIZE = 0x1000
+MSVCRT_BASE2 = 0x75ae1000
+MSVCRT_SIZE2 = 0x9f000
+
+KERNEL32_BASE = 0x758f1000
+KERNEL32_SIZE = 0x43000
+KERNEL32_BASE2 = 0x75934000
+KERNEL32_SIZE2 = 0x2000
+
+#SXS_BASE = 0x75660000
+#SXS_SIZE = 0x58000
+APPHELP_BASE = 0x75620000#0x75600000 ~ 0x7563c000 (3c000)
+APPHELP_SIZE = 0x1000
+
 
 SC_ADDR = 0x130e3000
 SC_SIZE = 0x1000
@@ -198,6 +225,8 @@ def hook_mem_invalid(em, access, addr, size, value, data):
 def hook_mem_access(em, access, addr, size, value, data):
     if access == UC_MEM_WRITE:
         print("Memory write at 0x%x, size: %u, value: 0x%x"%(addr, size, value)) 
+    elif access == UC_HOOK_MEM_FETCH_UNMAPPED:
+        print("Memory write at 0x%x, size: %u, value: 0x%x"%(addr, size, value)) 
     else:
         print("Memory read at 0x%x, size: %u, value: 0x%x"%(addr, size, value)) 
     return False
@@ -210,6 +239,12 @@ class ESC:
         #
         self.em.mem_map(NTDLL_BASE, NTDLL_SIZE)
         self.em.mem_map(NTDLL_BASE2, NTDLL_SIZE2)
+        self.em.mem_map(NTDLL_BASE3, NTDLL_SIZE3)
+        self.em.mem_map(MSVCRT_BASE, MSVCRT_SIZE)
+        self.em.mem_map(MSVCRT_BASE2, MSVCRT_SIZE2)
+        self.em.mem_map(KERNEL32_BASE, KERNEL32_SIZE)
+        self.em.mem_map(KERNEL32_BASE2, KERNEL32_SIZE2)
+        self.em.mem_map(APPHELP_BASE, APPHELP_SIZE)
         self.em.mem_map(STACK_TOP, STACK_SIZE)
         self.em.mem_map(CODE_BASE, CODE_SIZE)
         self.em.mem_map(0x69290000, 0x1000)
@@ -217,6 +252,9 @@ class ESC:
         self.em.mem_map(HEAP_BASE2, HEAP_SIZE2)
         self.em.mem_map(TEB_BASE, TEB_SIZE)
         self.em.mem_map(PEB_BASE, PEB_SIZE)
+        self.em.mem_map(SHARED_BASE, SHARED_SIZE)
+        self.em.mem_map(NLS_BASE, NLS_SIZE)
+        self.em.mem_map(ACTIVATION_BASE, ACTIVATION_SIZE)
         #self.em.mem_map(SC_ADDR, SC_SIZE)
         #
         #init mem
@@ -227,11 +265,20 @@ class ESC:
         for i in range(10):
             self.initMem(HEAP_BASE+0x10000*i, 0x10000)
         #self.initMem(HEAP_BASE, HEAP_SIZE)
-        self.initMem(HEAP_BASE2, 0x2000)
+        self.initMem(HEAP_BASE2, HEAP_SIZE2-0x1000)
         self.initMem(TEB_BASE, TEB_SIZE-1)
         self.initMem(PEB_BASE, PEB_SIZE-1)
         self.initMem(NTDLL_BASE, NTDLL_SIZE-1)
         self.initMem(NTDLL_BASE2, NTDLL_SIZE2-1)
+        self.initMem(NTDLL_BASE3, NTDLL_SIZE3-1)
+        self.initMem(MSVCRT_BASE, MSVCRT_SIZE-1)
+        self.initMem(MSVCRT_BASE2, MSVCRT_SIZE2-1)
+        self.initMem(KERNEL32_BASE, KERNEL32_SIZE-1)
+        self.initMem(KERNEL32_BASE2, KERNEL32_SIZE2-1)
+        self.initMem(APPHELP_BASE, APPHELP_SIZE-1)
+        self.initMem(SHARED_BASE, SHARED_SIZE-1)
+        self.initMem(NLS_BASE, NLS_SIZE-1)
+        self.initMem(ACTIVATION_BASE, ACTIVATION_SIZE-1)
         self.initMem(0x1ac000, 0x1000)
         #print(binascii.hexlify(esc.em.mem_read(0x130e30a0, 0x40)))
         #
@@ -240,6 +287,7 @@ class ESC:
         #self.em.hook_add(UC_HOOK_MEM_WRITE, hook_mem_access)
         self.em.hook_add(UC_HOOK_MEM_READ_UNMAPPED, hook_mem_invalid)
         self.em.hook_add(UC_HOOK_MEM_WRITE_UNMAPPED, hook_mem_invalid)
+        self.em.hook_add(UC_HOOK_MEM_FETCH_UNMAPPED, hook_mem_access)
 
     def setShellCode(self, addr, shellcode):
         self.shellcode = shellcode
@@ -336,7 +384,6 @@ def main():
     #setShellCode
     #esc.setShellCode(0x130e3000, scode)
     print("set shellcode done")
-    print(binascii.hexlify(esc.em.mem_read(0x130e30a0, 0x40)))
 
     #start
     print("GO\n\n")
