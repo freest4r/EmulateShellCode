@@ -4,7 +4,7 @@ class WinDump:
         self.dump = dumpPath
 
     def readMem(self, addr, size=0x20):
-        print("MINIDUMP -r %x -s %u"%(addr, size))
+        print("MINIDUMP -r %x -s %x"%(addr, size))
         hexstr = ''
         p = os.popen("minidump -r "+str(addr)+" -s "+str(size)+" "+self.dump)
         data = p.read()
