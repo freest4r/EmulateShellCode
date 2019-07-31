@@ -302,6 +302,8 @@ class ESC:
         self.initMem(NTDLL_BASE, NTDLL_SIZE-1)
         self.initMem(NTDLL_BASE2, NTDLL_SIZE2-1)
         self.initMem(NTDLL_BASE3, NTDLL_SIZE3-1)
+        self.initMem(KERNEL32_BASE, KERNEL32_SIZE-1)
+        self.initMem(KERNEL32_BASE2, KERNEL32_SIZE2-1)
         self.initMem(MSVCRT_BASE, MSVCRT_SIZE-1)
         self.initMem(MSVCRT_BASE2, MSVCRT_SIZE2-1)
         self.initMem(KERNELBASE_BASE, KERNELBASE_SIZE-1)
