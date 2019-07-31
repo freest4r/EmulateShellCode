@@ -3,7 +3,7 @@ from capstone import *
 from unicorn import *
 from unicorn.x86_const import *
 from struct import pack
-import sys, binascii
+import sys, binascii, pefile
 import WinDump
 
 
@@ -124,23 +124,33 @@ S_PRIV_1 = 0x1
 S_PRIV_0 = 0x0
 
 #########
+SWITCH_BASE = 0x60000
+SWITCH_SIZE = 0x1000
+
 STACK_BASE = 0x1b0000
 STACK_TOP = 0xb0000
 STACK_SIZE = STACK_BASE - STACK_TOP
-
-CODE_BASE = 0x69291000
-CODE_SIZE = 0x64000
 
 HEAP_BASE = 0x130e0000
 HEAP_SIZE = 0x100000
 HEAP_BASE2 = 0x250000
 HEAP_SIZE2 = 0xd2000
+HEAP_BASE3 = 0x4200000
+HEAP_SIZE3 = 0x1000
 
 SYSTEMDEF_BASE = 0x30000
 SYSTEMDEF_SIZE = 0x4000
 
 ACTIVATION_BASE = 0x40000
 ACTIVATION_SIZE  = 0x1000
+
+
+EPSIMP32_BASE = 0x69290000
+EPSIMP32_SIZE = 0x1000
+EPSIMP32_BASE2 = 0x69291000
+EPSIMP32_SIZE2 = 0x64000
+
+
 
 TEB_BASE = 0x7ffde000
 TEB_SIZE = 0x1000
@@ -175,6 +185,10 @@ KERNEL32_BASE = 0x76580000
 KERNEL32_SIZE = 0x1000
 KERNEL32_BASE2 = 0x76581000
 KERNEL32_SIZE2 = 0xc5000
+KERNEL32_BASE3 = 0x76646000
+KERNEL32_SIZE3 = 0x1000
+KERNEL32_BASE4 = 0x76647000
+KERNEL32_SIZE4 = 0xd000
 
 #SXS_BASE = 0x75660000
 #SXS_SIZE = 0x58000
@@ -191,6 +205,20 @@ SC_SIZE = 0x1000
 
 
 end = 0
+
+imp_des = {}
+
+def dll_loader(path,base):
+    print("dll_loading... ", path)
+    dll=pefile.PE(path,fast_load=True)
+    dll.parse_data_directories()
+    data=bytearray(dll.get_memory_mapped_image())
+    for entry in dll.DIRECTORY_ENTRY_EXPORT.symbols:
+        data[entry.address]='\xc3'
+        imp_des[base+entry.address]=entry.name
+        print(base+entry.address, entry.name)
+    return str(data)
+
 
 def printStack(em, size=0x40):
     esp = em.reg_read(UC_X86_REG_ESP)
@@ -240,6 +268,12 @@ def hook_code(em, addr, size, data):
     printStack(em) 
     if binascii.hexlify(ins) == '0000':
         checkend(em)
+    eip=em.reg_read(UC_X86_REG_EIP)
+    esp=em.reg_read(UC_X86_REG_ESP)
+    if((eip in imp_des)):
+        print("FOUND!!")
+        print(imp_des[eip])
+        #globals()['hook_'+imp_des[eip]](eip,esp,em)
 
 def hook_mem_invalid(em, access, addr, size, value, data):
     if access == UC_MEM_WRITE_UNMAPPED:
@@ -260,9 +294,13 @@ def hook_mem_access(em, access, addr, size, value, data):
 
 class ESC:
     def __init__(self, dumpPath):
+        kernel32dll = dll_loader("data/kernel32.dll",KERNEL32_BASE)
         self.dmp = WinDump.WinDump(dumpPath)
         self.em = Uc(UC_ARCH_X86, UC_MODE_32)
         #
+        self.em.mem_map(SWITCH_BASE, SWITCH_SIZE)
+        self.em.mem_map(EPSIMP32_BASE, EPSIMP32_SIZE)
+        self.em.mem_map(EPSIMP32_BASE2, EPSIMP32_SIZE2)
         self.em.mem_map(NTDLL_BASE, NTDLL_SIZE)
         self.em.mem_map(NTDLL_BASE2, NTDLL_SIZE2)
         self.em.mem_map(NTDLL_BASE3, NTDLL_SIZE3)
@@ -272,14 +310,15 @@ class ESC:
         self.em.mem_map(KERNELBASE_BASE2, KERNELBASE_SIZE2)
         self.em.mem_map(KERNEL32_BASE, KERNEL32_SIZE)
         self.em.mem_map(KERNEL32_BASE2, KERNEL32_SIZE2)
+        self.em.mem_map(KERNEL32_BASE3, KERNEL32_SIZE3)
+        self.em.mem_map(KERNEL32_BASE4, KERNEL32_SIZE4)
         self.em.mem_map(APPHELP_BASE, APPHELP_SIZE)
         self.em.mem_map(APPHELP_BASE2, APPHELP_SIZE2)
         self.em.mem_map(APPHELP_BASE3, APPHELP_SIZE3)
         self.em.mem_map(STACK_TOP, STACK_SIZE)
-        self.em.mem_map(CODE_BASE, CODE_SIZE)
-        self.em.mem_map(0x69290000, 0x1000)
         self.em.mem_map(HEAP_BASE, HEAP_SIZE)
         self.em.mem_map(HEAP_BASE2, HEAP_SIZE2)
+        self.em.mem_map(HEAP_BASE3, HEAP_SIZE3)
         self.em.mem_map(TEB_BASE, TEB_SIZE)
         self.em.mem_map(PEB_BASE, PEB_SIZE)
         self.em.mem_map(SHARED_BASE, SHARED_SIZE)
@@ -289,14 +328,15 @@ class ESC:
         #self.em.mem_map(SC_ADDR, SC_SIZE)
         #
         #init mem
+        self.initMem(SWITCH_BASE, SWITCH_SIZE-1)
+        self.initMem(EPSIMP32_BASE, EPSIMP32_SIZE-1)
+        self.initMem(EPSIMP32_BASE2, EPSIMP32_SIZE2-1)
         self.initMem(SC_ADDR, SC_SIZE)
-        self.initMem(0x69290000, 0xfff)
-        for i in range(1,6):
-            self.initMem(CODE_BASE+0x10000*i, 0x10000)
         for i in range(10):
             self.initMem(HEAP_BASE+0x10000*i, 0x10000)
         #self.initMem(HEAP_BASE, HEAP_SIZE)
         self.initMem(HEAP_BASE2, HEAP_SIZE2-0x1000)
+        self.initMem(HEAP_BASE3, HEAP_SIZE3-1)
         self.initMem(TEB_BASE, TEB_SIZE-1)
         self.initMem(PEB_BASE, PEB_SIZE-1)
         self.initMem(NTDLL_BASE, NTDLL_SIZE-1)
@@ -304,6 +344,8 @@ class ESC:
         self.initMem(NTDLL_BASE3, NTDLL_SIZE3-1)
         self.initMem(KERNEL32_BASE, KERNEL32_SIZE-1)
         self.initMem(KERNEL32_BASE2, KERNEL32_SIZE2-1)
+        self.initMem(KERNEL32_BASE3, KERNEL32_SIZE3-1)
+        self.initMem(KERNEL32_BASE4, KERNEL32_SIZE4-1)
         self.initMem(MSVCRT_BASE, MSVCRT_SIZE-1)
         self.initMem(MSVCRT_BASE2, MSVCRT_SIZE2-1)
         self.initMem(KERNELBASE_BASE, KERNELBASE_SIZE-1)
@@ -394,7 +436,6 @@ class ESC:
         data = self.dmp.readMem(addr, size)
         data = binascii.unhexlify(data)
         self.em.mem_write(addr, data)
-        m = self.em.mem_read(addr, size)
 
     def printStack(self, size=0x40):
         esp = self.em.reg_read(UC_X86_REG_ESP)
@@ -424,7 +465,6 @@ def main():
     #start
     print("GO\n\n")
     esc.em.emu_start(SC_ADDR,  SC_ADDR+0x150)
-    #esc.em.emu_start(esc.shellcode_addr, esc.shellcode_addr+len(esc.shellcode))
     print("\n\nDONE")
 
 

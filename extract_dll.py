@@ -8,6 +8,6 @@ wind = WinDump.WinDump("./WINWORD3.DMP")
 
 fp = open("kernel32.dll","wb")
 for i in range(len(KERNEL32_BASE)):
-    data = wind.readMem(KERNEL32_BASE[i], KERNEL32_SIZE[i]-1)
+    data = wind.readMem(KERNEL32_BASE[i], KERNEL32_SIZE[i]-1)+"00"
     fp.write(binascii.unhexlify(data))
 fp.close()
