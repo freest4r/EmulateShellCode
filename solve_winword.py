@@ -403,7 +403,7 @@ class ESC:
 
 
 def main():
-    esc = ESC("~/study/WINWORD3.DMP")
+    esc = ESC("./WINWORD3.DMP")
     print("load DMP done")
 
     #init GDT
