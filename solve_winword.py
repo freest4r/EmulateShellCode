@@ -2,7 +2,7 @@ from __future__ import print_function
 from capstone import *
 from unicorn import *
 from unicorn.x86_const import *
-from struct import pack
+from struct import pack,unpack
 import sys, binascii, pefile
 import WinDump
 
@@ -204,11 +204,54 @@ SC_ADDR = 0x130e3000
 SC_SIZE = 0x1000
 
 
+
 end = 0
 
-imp_des = {}
+WINAPI = {}
 
-def dll_loader(path,base):
+EXPORT_DIRECTORY_BASE = 0xb4da8
+
+def get_func_addr(em):
+    export_dir = em.mem_read(KERNEL32_BASE+EXPORT_DIRECTORY_BASE,0x30)
+
+    num_funcs = unpack("<I", export_dir[24:28])[0]
+    func_offset = unpack("<I", export_dir[28:32])[0]
+    name_offset= unpack("<I", export_dir[32:36])[0]
+    ordinal_offset = unpack("<I", export_dir[36:40])[0]
+
+    print("number of funcs: ", hex(num_funcs))
+    print("addresses of funcs: ", hex(func_offset))
+    print("names of funcs: ", hex(name_offset))
+    print("ordinals of funcs: ", hex(ordinal_offset))
+
+    names=[]
+    for i in range(0,num_funcs):
+        #func name
+        offset = em.mem_read(KERNEL32_BASE+name_offset+i*4, 4)
+        offset = unpack("<I", offset)[0]
+        c=''
+        name=''
+        while True:
+            c = em.mem_read(KERNEL32_BASE+offset, 1)
+            if c=="\x00":
+                break
+            name+=c
+            offset+=1
+        #ordinal
+        idx = unpack("<I", em.mem_read(KERNEL32_BASE+ordinal_offset+i*2, 2)+"\x00\x00")[0]
+        #func addr
+        offset = unpack("<I", em.mem_read(KERNEL32_BASE+func_offset+idx*4, 4))[0]
+
+        if hex(KERNEL32_BASE+offset) not in WINAPI.keys():
+            WINAPI[hex(KERNEL32_BASE+offset)] = []
+        WINAPI[hex(KERNEL32_BASE+offset)].append(str(name))
+
+    print(WINAPI)
+    print(len(WINAPI.keys()))
+    
+
+
+def dll_loader(em, path,base):
     print("dll_loading... ", path)
     dll=pefile.PE(path,fast_load=True)
     dll.parse_data_directories()
@@ -294,10 +337,23 @@ def hook_mem_access(em, access, addr, size, value, data):
 
 class ESC:
     def __init__(self, dumpPath):
-        kernel32dll = dll_loader("data/kernel32.dll",KERNEL32_BASE)
         self.dmp = WinDump.WinDump(dumpPath)
         self.em = Uc(UC_ARCH_X86, UC_MODE_32)
+        #kernel32dll = dll_loader(em, "data/kernel32.dll",KERNEL32_BASE)
+
+
         #
+        self.em.mem_map(KERNEL32_BASE, KERNEL32_SIZE)
+        self.em.mem_map(KERNEL32_BASE2, KERNEL32_SIZE2)
+        self.em.mem_map(KERNEL32_BASE3, KERNEL32_SIZE3)
+        self.em.mem_map(KERNEL32_BASE4, KERNEL32_SIZE4)
+        self.initMem(KERNEL32_BASE, KERNEL32_SIZE-1)
+        self.initMem(KERNEL32_BASE2, KERNEL32_SIZE2-1)
+        self.initMem(KERNEL32_BASE3, KERNEL32_SIZE3-1)
+        self.initMem(KERNEL32_BASE4, KERNEL32_SIZE4-1)
+        get_func_addr(self.em)
+        sys.exit(1)
+
         self.em.mem_map(SWITCH_BASE, SWITCH_SIZE)
         self.em.mem_map(EPSIMP32_BASE, EPSIMP32_SIZE)
         self.em.mem_map(EPSIMP32_BASE2, EPSIMP32_SIZE2)
@@ -308,10 +364,6 @@ class ESC:
         self.em.mem_map(MSVCRT_BASE2, MSVCRT_SIZE2)
         self.em.mem_map(KERNELBASE_BASE, KERNELBASE_SIZE)
         self.em.mem_map(KERNELBASE_BASE2, KERNELBASE_SIZE2)
-        self.em.mem_map(KERNEL32_BASE, KERNEL32_SIZE)
-        self.em.mem_map(KERNEL32_BASE2, KERNEL32_SIZE2)
-        self.em.mem_map(KERNEL32_BASE3, KERNEL32_SIZE3)
-        self.em.mem_map(KERNEL32_BASE4, KERNEL32_SIZE4)
         self.em.mem_map(APPHELP_BASE, APPHELP_SIZE)
         self.em.mem_map(APPHELP_BASE2, APPHELP_SIZE2)
         self.em.mem_map(APPHELP_BASE3, APPHELP_SIZE3)
@@ -342,10 +394,6 @@ class ESC:
         self.initMem(NTDLL_BASE, NTDLL_SIZE-1)
         self.initMem(NTDLL_BASE2, NTDLL_SIZE2-1)
         self.initMem(NTDLL_BASE3, NTDLL_SIZE3-1)
-        self.initMem(KERNEL32_BASE, KERNEL32_SIZE-1)
-        self.initMem(KERNEL32_BASE2, KERNEL32_SIZE2-1)
-        self.initMem(KERNEL32_BASE3, KERNEL32_SIZE3-1)
-        self.initMem(KERNEL32_BASE4, KERNEL32_SIZE4-1)
         self.initMem(MSVCRT_BASE, MSVCRT_SIZE-1)
         self.initMem(MSVCRT_BASE2, MSVCRT_SIZE2-1)
         self.initMem(KERNELBASE_BASE, KERNELBASE_SIZE-1)
