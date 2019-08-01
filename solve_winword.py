@@ -5,6 +5,8 @@ from unicorn.x86_const import *
 from struct import pack,unpack
 import sys, binascii, pefile
 import WinDump
+from WinAPIHook import *
+
 
 
 '''
@@ -137,6 +139,10 @@ HEAP_BASE2 = 0x250000
 HEAP_SIZE2 = 0xd2000
 HEAP_BASE3 = 0x4200000
 HEAP_SIZE3 = 0x1000
+HEAP_BASE4 = 0x520000
+HEAP_SIZE4 = 0x10000
+HEAP_BASE5 = 0x3260000
+HEAP_SIZE5 = 0x100000
 
 SYSTEMDEF_BASE = 0x30000
 SYSTEMDEF_SIZE = 0x4000
@@ -203,8 +209,6 @@ APPHELP_SIZE3 = 0x3000
 SC_ADDR = 0x130e3000
 SC_SIZE = 0x1000
 
-
-
 end = 0
 
 WINAPI = {}
@@ -218,11 +222,6 @@ def get_func_addr(em):
     func_offset = unpack("<I", export_dir[28:32])[0]
     name_offset= unpack("<I", export_dir[32:36])[0]
     ordinal_offset = unpack("<I", export_dir[36:40])[0]
-
-    print("number of funcs: ", hex(num_funcs))
-    print("addresses of funcs: ", hex(func_offset))
-    print("names of funcs: ", hex(name_offset))
-    print("ordinals of funcs: ", hex(ordinal_offset))
 
     names=[]
     for i in range(0,num_funcs):
@@ -242,14 +241,9 @@ def get_func_addr(em):
         #func addr
         offset = unpack("<I", em.mem_read(KERNEL32_BASE+func_offset+idx*4, 4))[0]
 
-        if hex(KERNEL32_BASE+offset) not in WINAPI.keys():
-            WINAPI[hex(KERNEL32_BASE+offset)] = []
-        WINAPI[hex(KERNEL32_BASE+offset)].append(str(name))
-
-    print(WINAPI)
-    print(len(WINAPI.keys()))
-    
-
+        if KERNEL32_BASE+offset not in WINAPI.keys():
+            WINAPI[KERNEL32_BASE+offset] = []
+        WINAPI[KERNEL32_BASE+offset].append(str(name))
 
 def dll_loader(em, path,base):
     print("dll_loading... ", path)
@@ -307,16 +301,18 @@ def hook_code(em, addr, size, data):
         print("%x: %-8s\t%s\t%s" % (a.address, binascii.hexlify(ins), a.mnemonic, a.op_str) )
         if size == None:
             break
-    printRegs(em)
-    printStack(em) 
+    #printRegs(em)
+    #printStack(em) 
     if binascii.hexlify(ins) == '0000':
         checkend(em)
     eip=em.reg_read(UC_X86_REG_EIP)
     esp=em.reg_read(UC_X86_REG_ESP)
-    if((eip in imp_des)):
-        print("FOUND!!")
-        print(imp_des[eip])
-        #globals()['hook_'+imp_des[eip]](eip,esp,em)
+    if eip in WINAPI:
+        func = WINAPI[eip][0]
+        if 'hook_'+func in globals():
+            globals()['hook_'+func](em,esp)
+        if len(WINAPI[eip])>1:
+            print(WINAPI[eip])
 
 def hook_mem_invalid(em, access, addr, size, value, data):
     if access == UC_MEM_WRITE_UNMAPPED:
@@ -342,7 +338,7 @@ class ESC:
         #kernel32dll = dll_loader(em, "data/kernel32.dll",KERNEL32_BASE)
 
 
-        #
+        #kernel32.dll
         self.em.mem_map(KERNEL32_BASE, KERNEL32_SIZE)
         self.em.mem_map(KERNEL32_BASE2, KERNEL32_SIZE2)
         self.em.mem_map(KERNEL32_BASE3, KERNEL32_SIZE3)
@@ -352,7 +348,7 @@ class ESC:
         self.initMem(KERNEL32_BASE3, KERNEL32_SIZE3-1)
         self.initMem(KERNEL32_BASE4, KERNEL32_SIZE4-1)
         get_func_addr(self.em)
-        sys.exit(1)
+        #
 
         self.em.mem_map(SWITCH_BASE, SWITCH_SIZE)
         self.em.mem_map(EPSIMP32_BASE, EPSIMP32_SIZE)
@@ -371,6 +367,8 @@ class ESC:
         self.em.mem_map(HEAP_BASE, HEAP_SIZE)
         self.em.mem_map(HEAP_BASE2, HEAP_SIZE2)
         self.em.mem_map(HEAP_BASE3, HEAP_SIZE3)
+        self.em.mem_map(HEAP_BASE4, HEAP_SIZE4)
+        #self.em.mem_map(HEAP_BASE5, HEAP_SIZE5)
         self.em.mem_map(TEB_BASE, TEB_SIZE)
         self.em.mem_map(PEB_BASE, PEB_SIZE)
         self.em.mem_map(SHARED_BASE, SHARED_SIZE)
@@ -389,6 +387,8 @@ class ESC:
         #self.initMem(HEAP_BASE, HEAP_SIZE)
         self.initMem(HEAP_BASE2, HEAP_SIZE2-0x1000)
         self.initMem(HEAP_BASE3, HEAP_SIZE3-1)
+        self.initMem(HEAP_BASE4, HEAP_SIZE4-1)
+        #self.initMem(HEAP_BASE5, HEAP_SIZE5-1)
         self.initMem(TEB_BASE, TEB_SIZE-1)
         self.initMem(PEB_BASE, PEB_SIZE-1)
         self.initMem(NTDLL_BASE, NTDLL_SIZE-1)
