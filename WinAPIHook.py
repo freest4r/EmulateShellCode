@@ -91,6 +91,8 @@ def hook_WriteFile(em, esp):
     arg4 = pop(em, esp+0x10)
     arg5 = pop(em, esp+0x14)
     print("WriteFile(%x, %x, %x, %x, %x)"%(arg1, arg2, arg3, arg4, arg5))
+    data = em.mem_read(arg2, arg3)
+    open("_write_file_","wb").write(data)
 
 #BOOL CloseHandle(
 #   HANDLE hObject
