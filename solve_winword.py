@@ -293,16 +293,16 @@ def checkend(em):
         sys.exit(1)
 
 def hook_code(em, addr, size, data):
-    md = Cs(CS_ARCH_X86, CS_MODE_32)
     ins = em.mem_read(addr, size)
+    md = Cs(CS_ARCH_X86, CS_MODE_32)
     print("--------------------------------------")
     asm = md.disasm(str(ins),addr)
     for a in asm:
         print("%x: %-8s\t%s\t%s" % (a.address, binascii.hexlify(ins), a.mnemonic, a.op_str) )
         if size == None:
             break
-    #printRegs(em)
-    #printStack(em) 
+    printRegs(em)
+    printStack(em) 
     if binascii.hexlify(ins) == '0000':
         checkend(em)
     eip=em.reg_read(UC_X86_REG_EIP)
@@ -368,7 +368,7 @@ class ESC:
         self.em.mem_map(HEAP_BASE2, HEAP_SIZE2)
         self.em.mem_map(HEAP_BASE3, HEAP_SIZE3)
         self.em.mem_map(HEAP_BASE4, HEAP_SIZE4)
-        #self.em.mem_map(HEAP_BASE5, HEAP_SIZE5)
+        self.em.mem_map(HEAP_BASE5, HEAP_SIZE5)
         self.em.mem_map(TEB_BASE, TEB_SIZE)
         self.em.mem_map(PEB_BASE, PEB_SIZE)
         self.em.mem_map(SHARED_BASE, SHARED_SIZE)
@@ -388,7 +388,7 @@ class ESC:
         self.initMem(HEAP_BASE2, HEAP_SIZE2-0x1000)
         self.initMem(HEAP_BASE3, HEAP_SIZE3-1)
         self.initMem(HEAP_BASE4, HEAP_SIZE4-1)
-        #self.initMem(HEAP_BASE5, HEAP_SIZE5-1)
+        self.initMem(HEAP_BASE5, HEAP_SIZE5-1)
         self.initMem(TEB_BASE, TEB_SIZE-1)
         self.initMem(PEB_BASE, PEB_SIZE-1)
         self.initMem(NTDLL_BASE, NTDLL_SIZE-1)
